@@ -5,6 +5,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 
 TOKEN = 8299997511:AAGlB2LoP-p0RS06M7ZtMTt0OVlvnxUNXtE
 
+# Evitar dependencia de unrar externo
+rarfile.UNRAR_TOOL = "python"  # usa el backend interno de Python
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("¡Envía un archivo .cbr para obtener la primera página!")
 
@@ -17,10 +20,6 @@ async def handle_cbr(update: Update, context: ContextTypes.DEFAULT_TYPE):
             first_img_name = sorted(r.namelist())[0]
             img_data = r.read(first_img_name)
             await update.message.reply_photo(photo=img_data)
-    except rarfile.RarCannotExec:
-        await update.message.reply_text(
-            "No se puede abrir el CBR: falta unrar en el servidor."
-        )
     except Exception as e:
         await update.message.reply_text(f"Error al procesar el CBR: {e}")
 
