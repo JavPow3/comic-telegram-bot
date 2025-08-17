@@ -1,42 +1,31 @@
-import os
-import zipfile
 import rarfile
-from PIL import Image
+import io
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = 8299997511:AAGlB2LoP-p0RS06M7ZtMTt0OVlvnxUNXtE
 
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("¡Envía un archivo .cbr para obtener la primera página!")
+
+async def handle_cbr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file = await update.message.document.get_file()
-    file_path = f"/tmp/{update.message.document.file_name}"
-    await file.download_to_drive(file_path)
+    file_bytes = await file.download_as_bytearray()
 
-    first_image_path = "/tmp/first_page.jpg"
+    try:
+        with rarfile.RarFile(io.BytesIO(file_bytes)) as r:
+            first_img_name = sorted(r.namelist())[0]
+            img_data = r.read(first_img_name)
+            await update.message.reply_photo(photo=img_data)
+    except rarfile.RarCannotExec:
+        await update.message.reply_text(
+            "No se puede abrir el CBR: falta unrar en el servidor."
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Error al procesar el CBR: {e}")
 
-    if file_path.endswith(".cbz"):
-        with zipfile.ZipFile(file_path, 'r') as archive:
-            name = [n for n in archive.namelist() if n.lower().endswith((".jpg", ".jpeg", ".png"))][0]
-            archive.extract(name, "/tmp")
-            os.rename(f"/tmp/{name}", first_image_path)
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.Document.FileExtension("cbr"), handle_cbr))
 
-    elif file_path.endswith(".cbr"):
-        rarfile.UNRAR_TOOL = "unrar"  # o bsdtar en Render si no hay unrar
-        with rarfile.RarFile(file_path) as archive:
-            name = [n for n in archive.namelist() if n.lower().endswith((".jpg", ".jpeg", ".png"))][0]
-            archive.extract(name, "/tmp")
-            os.rename(f"/tmp/{name}", first_image_path)
-
-    await update.message.reply_photo(photo=open(first_image_path, 'rb'))
-
-def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", "8080")),
-        webhook_url=f"https://TU_APP.onrender.com/{TOKEN}"
-    )
-
-if __name__ == "__main__":
-    main()
+app.run_polling()
